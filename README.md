@@ -100,6 +100,64 @@ claude mcp add jev \
 Restart Claude Code (or run `/mcp` to check connection status). Claude can
 now call `jev_ask` and `jev_health` mid-task.
 
+## Guardrail hooks (optional)
+
+The MCP tools above are *passive* — Claude decides on its own whether to call
+them. If you want Jev/Kev to sit in the loop as a **mandatory** check before
+specific things happen, use Claude Code's [hooks](https://docs.claude.com/en/docs/claude-code/hooks)
+instead. Two are included under `hooks/`:
+
+| Script | Hook event | What it does |
+| --- | --- | --- |
+| `hooks/pretooluse-guardrail.mjs` | `PreToolUse` (matcher: `Bash`) | Cheaply pre-filters for high-stakes shell commands (`git push`, `terraform apply`, `DROP TABLE`, payment/cloud-delete calls, ...). Only those get sent to Jev for a risk judgment; everything else is a fast no-op. Denies commands Jev is confident are dangerous, asks for human confirmation on anything moderate/uncertain. |
+| `hooks/stop-guardrail.mjs` | `Stop` | Before Claude ends a turn, sends its final response to Jev for a quick "does this look complete and safe to hand back?" check. If Jev isn't confident, blocks the stop once and tells Claude why, so it gets one automatic chance to fix itself. |
+
+Both scripts call the System One endpoint directly over HTTP (same
+`JEV_BASE_URL`/`JEV_API_KEY`/`JEV_MODEL` env vars as the MCP server) and
+**fail open**: if the endpoint is unreachable, they warn and let the agent
+proceed rather than blocking everything.
+
+### Enable them
+
+Add to `~/.claude/settings.json` (all projects) or `.claude/settings.json`
+(one project):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node /absolute/path/to/jev-mcp/hooks/pretooluse-guardrail.mjs" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node /absolute/path/to/jev-mcp/hooks/stop-guardrail.mjs" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Test a hook script directly
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main --force"}}' \
+  | node hooks/pretooluse-guardrail.mjs
+
+echo '{"last_assistant_message":"Fixed it, but I didn'"'"'t run the tests yet.","stop_hook_active":false}' \
+  | node hooks/stop-guardrail.mjs
+```
+
+Tune the risk patterns, questions, and thresholds directly in the scripts —
+they're plain, dependency-free Node (`hooks/lib.mjs` has the shared HTTP
+call), not something you need to rebuild.
+
 ## Configuration
 
 | Env var | Default | Purpose |
