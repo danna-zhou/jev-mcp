@@ -1,0 +1,25 @@
+{
+  "name": "jev-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that lets Claude Code call a Jev-compatible System One API (TypeSafe's Jev, or a local Kev server) for classification, scoring, and yes/no judgments during agent workflows.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "jev-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "license": "MIT",
+  "author": "danna-zhou",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.5.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
