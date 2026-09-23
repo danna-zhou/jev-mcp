@@ -25,7 +25,17 @@
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { readStdinJson, askJev, emit, failOpen } from "./lib.mjs";
+
+/** Best-effort macOS notification, independent of whatever chat UI is in front. */
+function notify(title, message) {
+  if (process.platform !== "darwin") return;
+  const script = `display notification ${JSON.stringify(message)} with title ${JSON.stringify(title)}`;
+  execFile("osascript", ["-e", script], () => {
+    /* ignore failures — this is a best-effort side channel */
+  });
+}
 
 const LOG_PATH = process.env.JEV_QUALITY_LOG ?? path.join(os.homedir(), ".claude", "jev-quality-log.jsonl");
 const SHOULD_BLOCK = false; // dashboard mode: score everything, block nothing
@@ -93,9 +103,17 @@ try {
   await fs.mkdir(path.dirname(LOG_PATH), { recursive: true });
   await fs.appendFile(LOG_PATH, logLine, "utf8");
 
-  // systemMessage only — shown to you, not fed into Claude's context, so
-  // scoring every turn doesn't pollute the conversation Claude reasons over.
+  // NOTE: hookSpecificOutput.additionalContext on the Stop event forces
+  // Claude to keep going for another turn (same continuation mechanism as
+  // decision: "block", just labeled differently) — not what we want for a
+  // display-only dashboard. systemMessage is the only non-blocking, visible
+  // channel Stop supports, and whether your specific Claude Code client
+  // renders it is client-dependent. So we also fire a native OS notification
+  // (macOS only, best-effort) as a channel that's independent of the chat
+  // UI entirely. The JSONL log is the one source of truth regardless of any
+  // of this — see JEV_QUALITY_LOG.
   emit({ systemMessage: summary });
+  notify("jev guardrail", summary);
 
   // --- Optional: flip this on to also block low-scoring turns -----------
   // if (SHOULD_BLOCK && (quality.score < 1 || accuracy.score < 1)) {
